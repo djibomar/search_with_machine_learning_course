@@ -113,23 +113,31 @@ def query():
 
 def create_query(user_query, filters, sort="_score", sortDir="desc"):
     print("Query: {} Filters: {} Sort: {}".format(user_query, filters, sort))
+    
+    if(user_query is '*'):
+        query = {
+            "match_all" : {}
+        }
+    else:
+        query = { 
+            "bool" : {
+                "must": [
+                    {
+                        "multi_match" : {
+                            "query": user_query, 
+                            "fields": ["name^100", "shortDescription^50", "longDescription^10", "department"] 
+                        }
+                    }
+                ],
+                "filter": filters
+            }
+        }
+
     query_obj = {
         'size': 10,
         "query" : {
             "function_score" : {
-                "query": { 
-                    "bool" : {
-                        "must": [
-                            {
-                                "multi_match" : {
-                                    "query": user_query, 
-                                    "fields": ["name^100", "shortDescription^50", "longDescription^10", "department"] 
-                                }
-                            }
-                        ],
-                        "filter": filters
-                    }
-                },
+                "query": query,
                 "boost_mode": "replace",
                 "score_mode": "avg",
                 "functions": [
