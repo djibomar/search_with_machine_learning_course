@@ -22,16 +22,37 @@ def process_filters(filters_input):
     for filter in filters_input:
         type = request.args.get(filter + ".type")
         display_name = request.args.get(filter + ".displayName", filter)
+        key = request.args.get(filter + ".key")
         #
         # We need to capture and return what filters are already applied so they can be automatically added to any existing links we display in aggregations.jinja2
-        applied_filters += "&filter.name={}&{}.type={}&{}.displayName={}".format(filter, filter, type, filter,
-                                                                                 display_name)
-        #TODO: IMPLEMENT AND SET filters, display_filters and applied_filters.
+        applied_filters += "&filter.name={}&{}.type={}&{}.displayName={}&{}.key={}".format(filter, filter, type, filter,
+                                                                                 display_name, filter, key)
+        display_filters.append("{}: {}".format(filter, key))
+
         # filters get used in create_query below.  display_filters gets used by display_filters.jinja2 and applied_filters gets used by aggregations.jinja2 (and any other links that would execute a search.)
         if type == "range":
-            pass
-        elif type == "terms":
-            pass #TODO: IMPLEMENT
+            _from = request.args.get(filter + ".from")
+            _to = request.args.get(filter + ".to")
+
+            filters.append({
+                "range": {
+                    filter: {
+                        "gte": _from,
+                        "lt": _to,
+                    }
+                }
+            })
+
+            applied_filters += "&{}.from={}&{}.to={}".format(filter, _from, filter, _to)
+        elif type == "terms": 
+            filter_key = "{}.keyword".format(filter)
+
+            filters.append({
+                "term" : {
+                    filter_key: key
+                }
+            })
+
     print("Filters: {}".format(filters))
 
     return filters, display_filters, applied_filters
@@ -42,6 +63,7 @@ def process_filters(filters_input):
 def query():
     opensearch = get_opensearch() # Load up our OpenSearch client from the opensearch.py file.
     # Put in your code to query opensearch.  Set error as appropriate.
+    index_name = "bbuy_products"
     error = None
     user_query = None
     query_obj = None
@@ -74,7 +96,10 @@ def query():
         query_obj = create_query("*", [], sort, sortDir)
 
     print("query obj: {}".format(query_obj))
-    response = None   # TODO: Replace me with an appropriate call to OpenSearch
+    response =  opensearch.search(
+        body = query_obj,
+        index = index_name
+    )
     # Postprocess results here if you so desire
 
     #print(response)
@@ -88,13 +113,87 @@ def query():
 
 def create_query(user_query, filters, sort="_score", sortDir="desc"):
     print("Query: {} Filters: {} Sort: {}".format(user_query, filters, sort))
+    
+    if(user_query is '*'):
+        query = {
+            "match_all" : {}
+        }
+    else:
+        query = { 
+            "bool" : {
+                "must": [
+                    {
+                        "multi_match" : {
+                            "query": user_query, 
+                            "fields": ["name^100", "shortDescription^50", "longDescription^10", "department"] 
+                        }
+                    }
+                ],
+                "filter": filters
+            }
+        }
+
     query_obj = {
         'size': 10,
-        "query": {
-            "match_all": {} # Replace me with a query that both searches and filters
+        "query" : {
+            "function_score" : {
+                "query": query,
+                "boost_mode": "replace",
+                "score_mode": "avg",
+                "functions": [
+                    {
+                        "field_value_factor": {
+                            "field": "salesRankShortTerm",
+                            "modifier": "reciprocal",
+                            "missing": 100000000
+                        } 
+                    },
+                    {
+                        "field_value_factor": {
+                        "field": "salesRankMediumTerm",
+                        "modifier": "reciprocal",
+                        "missing": 100000000
+                        }
+                    },
+                    {
+                        "field_value_factor": {
+                        "field": "salesRankLongTerm",
+                        "modifier": "reciprocal",
+                        "missing": 100000000
+                        } 
+                    }
+                ]
+            },
+            
         },
         "aggs": {
-            #TODO: FILL ME IN
-        }
+            "regularPrice": {
+                "range": {
+                    "field": "regularPrice",
+                    "ranges": [
+                        { "key" : "$", "from" : 0.0, "to": 50.0 },
+                        { "key" : "$$", "from": 50.0, "to": 100.0 },
+                        { "key" : "$$$", "from": 100.0, "to" : 200.0 },
+                        { "key" : "$$$$", "from": 200.0, "to" : 500.0 },
+                        { "key" : "$$$$$", "from": 500.0, "to" : 1000.0 },
+                        { "key" : "$$$$$$", "from": 1000.0, "to" : 10000.0 }
+                    ]
+                }
+            },
+            "department": {
+                "terms": {
+                    "field": "department.keyword"
+                }
+            },
+            "missing_images": {
+                "missing": {
+                    "field": "image.keyword"
+                }
+            }
+        },
+        "sort" : [
+            { sort : sortDir },
+        ],
     }
+
     return query_obj
