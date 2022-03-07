@@ -3,6 +3,7 @@ import random
 import xml.etree.ElementTree as ET
 import argparse
 from pathlib import Path
+from utilities.text_utils import clean_and_stem, clean
 
 directory = r'/workspace/search_with_machine_learning_course/data/pruned_products'
 parser = argparse.ArgumentParser(description='Process some integers.')
@@ -26,8 +27,7 @@ if args.input:
 sample_rate = args.sample_rate
 
 def transform_training_data(name):
-    # IMPLEMENT
-    return name.replace('\n', ' ')
+    return clean_and_stem(name)
 
 # Directory for product data
 
