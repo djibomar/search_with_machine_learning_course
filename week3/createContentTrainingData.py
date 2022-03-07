@@ -41,6 +41,7 @@ general.add_argument("--sample_rate", default=1.0, type=float, help="The rate at
 
 # IMPLEMENT: Setting min_products removes infrequent categories and makes the classifier's task easier.
 general.add_argument("--min_products", default=0, type=int, help="The minimum number of products per category (default is 0).")
+general.add_argument("--replace_category_with_parent_depth", default=0, type=int, help="The minimum number of products per category (default is 0).")
 
 args = parser.parse_args()
 output_file = args.output
@@ -65,9 +66,9 @@ def count_categories():
                 # Check to make sure category name is valid
                 if (child.find('name') is not None and child.find('name').text is not None and
                     child.find('categoryPath') is not None and len(child.find('categoryPath')) > 0 and
-                    child.find('categoryPath')[len(child.find('categoryPath')) - 1][0].text is not None):
+                    child.find('categoryPath')[len(child.find('categoryPath')) - (1 + replace_category_with_parent_depth)][0].text is not None):
                       # Choose last element in categoryPath as the leaf categoryId
-                      cat = child.find('categoryPath')[len(child.find('categoryPath')) - 1][0].text
+                      cat = child.find('categoryPath')[len(child.find('categoryPath')) - (1 + replace_category_with_parent_depth)][0].text
                       
                       if not cat in count_map:
                           count_map[cat] = 0
@@ -78,6 +79,7 @@ def count_categories():
 
 min_products = args.min_products
 sample_rate = args.sample_rate
+replace_category_with_parent_depth = args.replace_category_with_parent_depth
 
 categories_count = count_categories()
 
@@ -95,9 +97,9 @@ with open(output_file, 'w') as output:
                 # Check to make sure category name is valid
                 if (child.find('name') is not None and child.find('name').text is not None and
                     child.find('categoryPath') is not None and len(child.find('categoryPath')) > 0 and
-                    child.find('categoryPath')[len(child.find('categoryPath')) - 1][0].text is not None):
+                    child.find('categoryPath')[len(child.find('categoryPath')) - (1 + replace_category_with_parent_depth)][0].text is not None):
                       # Choose last element in categoryPath as the leaf categoryId
-                      cat = child.find('categoryPath')[len(child.find('categoryPath')) - 1][0].text
+                      cat = child.find('categoryPath')[len(child.find('categoryPath')) - (1 + replace_category_with_parent_depth)][0].text
 
                       if categories_count[cat] < min_products:
                           continue
